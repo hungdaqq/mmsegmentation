@@ -120,5 +120,3 @@ mmseg/.mim
 *.pth
 
 work_dirs/
-tests/
-
