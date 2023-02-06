@@ -1,10 +1,10 @@
 # yapf:disable
 log_config = dict(
-    interval=50,
+    interval=100,
     hooks=[
         dict(type='TextLoggerHook', by_epoch=False),
-        # dict(type='TensorboardLoggerHook')
-        # dict(type='PaviLoggerHook') # for internal services
+        dict(type='TensorboardLoggerHook')
+        # dict(type='WandbLoggerHook') # for insternal services
     ])
 # yapf:enable
 dist_params = dict(backend='nccl')

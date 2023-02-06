@@ -7,3 +7,4 @@ model = dict(
         init_cfg=dict(
             type='Pretrained', checkpoint=checkpoint_file,
             prefix='backbone.')))
+data = dict(samples_per_gpu=2)

@@ -1,11 +1,11 @@
 _base_ = [
-    '../_base_/models/upernet_convnext.py', '../_base_/datasets/ade20k.py',
+    '../_base_/models/upernet_convnext.py', '../_base_/datasets/skin.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
 ]
 crop_size = (512, 512)
 model = dict(
-    decode_head=dict(in_channels=[128, 256, 512, 1024], num_classes=150),
-    auxiliary_head=dict(in_channels=512, num_classes=150),
+    decode_head=dict(in_channels=[128, 256, 512, 1024], num_classes=2, out_channels=2),
+    auxiliary_head=dict(in_channels=512, num_classes=2, out_channels=2),
     test_cfg=dict(mode='slide', crop_size=crop_size, stride=(341, 341)),
 )
 

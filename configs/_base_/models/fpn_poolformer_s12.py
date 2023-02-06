@@ -1,5 +1,5 @@
 # model settings
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='BN', requires_grad=True)
 checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/poolformer/poolformer-s12_3rdparty_32xb128_in1k_20220414-f8d83051.pth'  # noqa
 custom_imports = dict(imports='mmcls.models', allow_failed_imports=False)
 model = dict(
@@ -32,11 +32,11 @@ model = dict(
         feature_strides=[4, 8, 16, 32],
         channels=128,
         dropout_ratio=0.1,
-        num_classes=19,
+        num_classes=2,
         norm_cfg=norm_cfg,
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
-    # model training and testing settings
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
+
     train_cfg=dict(),
     test_cfg=dict(mode='whole'))

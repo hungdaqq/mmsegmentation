@@ -106,7 +106,7 @@ class BaseDecodeHead(BaseModule, metaclass=ABCMeta):
                 f'and num_classes={num_classes}')
 
         if out_channels == 1 and threshold is None:
-            threshold = 0.3
+            threshold = 0.4
             warnings.warn('threshold is not defined for binary, and defaults'
                           'to 0.3')
         self.num_classes = num_classes

@@ -8,3 +8,5 @@ model = dict(
     backbone=dict(
         embed_dims=64, num_heads=[1, 2, 5, 8], num_layers=[2, 2, 2, 2]),
     decode_head=dict(in_channels=[64, 128, 320, 512]))
+
+data = dict(samples_per_gpu=2)

@@ -1,9 +1,9 @@
 _base_ = [
     '../_base_/models/bisenetv1_r18-d32.py',
     '../_base_/datasets/cityscapes_1024x1024.py',
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_150k.py'
 ]
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     type='EncoderDecoder',
     backbone=dict(
@@ -20,7 +20,7 @@ model = dict(
             in_channels=512,
             channels=256,
             num_convs=1,
-            num_classes=19,
+            num_classes=2,
             in_index=1,
             norm_cfg=norm_cfg,
             concat_input=False),
@@ -29,7 +29,7 @@ model = dict(
             in_channels=512,
             channels=256,
             num_convs=1,
-            num_classes=19,
+            num_classes=2,
             in_index=2,
             norm_cfg=norm_cfg,
             concat_input=False),

@@ -1,6 +1,6 @@
 _base_ = [
-    '../_base_/models/upernet_convnext.py', '../_base_/datasets/ade20k.py',
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
+    '../_base_/models/upernet_convnext.py', '../_base_/datasets/skin.py',
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_100k.py'
 ]
 crop_size = (512, 512)
 checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/convnext/downstream/convnext-tiny_3rdparty_32xb128-noema_in1k_20220301-795e9634.pth'  # noqa
@@ -17,9 +17,10 @@ model = dict(
             prefix='backbone.')),
     decode_head=dict(
         in_channels=[96, 192, 384, 768],
-        num_classes=150,
+        num_classes=2,
+        out_channels=2
     ),
-    auxiliary_head=dict(in_channels=384, num_classes=150),
+    auxiliary_head=dict(in_channels=384, num_classes=2, out_channels=2),
     test_cfg=dict(mode='slide', crop_size=crop_size, stride=(341, 341)),
 )
 
@@ -47,7 +48,7 @@ lr_config = dict(
     by_epoch=False)
 
 # By default, models are trained on 8 GPUs with 2 images per GPU
-data = dict(samples_per_gpu=2)
+data = dict(samples_per_gpu=4)
 # fp16 settings
 optimizer_config = dict(type='Fp16OptimizerHook', loss_scale='dynamic')
 # fp16 placeholder

@@ -1,7 +1,7 @@
 _base_ = [
     '../_base_/models/segmenter_vit-b16_mask.py',
     '../_base_/datasets/ade20k_640x640.py', '../_base_/default_runtime.py',
-    '../_base_/schedules/schedule_160k.py'
+    '../_base_/schedules/schedule_150k.py'
 ]
 checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segmenter/vit_large_p16_384_20220308-d4efb41d.pth'  # noqa
 

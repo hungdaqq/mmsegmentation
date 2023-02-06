@@ -6,7 +6,7 @@ from .custom import CustomDataset
 
 
 @DATASETS.register_module()
-class STAREDataset(CustomDataset):
+class SKINDataset(CustomDataset):
     """STARE dataset.
 
     In segmentation map annotation for STARE, 0 stands for background, which is
@@ -15,14 +15,14 @@ class STAREDataset(CustomDataset):
     '.ah.png'.
     """
 
-    CLASSES = ('background', 'vessel')
+    CLASSES = ('background', 'true')
 
-    PALETTE = [[120, 120, 120], [6, 230, 230]]
+    PALETTE = [[0, 0, 0], [255, 255, 255]]
 
     def __init__(self, **kwargs):
-        super(STAREDataset, self).__init__(
-            img_suffix='.png',
-            seg_map_suffix='.ah.png',
+        super(SKINDataset, self).__init__(
+            img_suffix='.jpg',
+            seg_map_suffix='_segmentation.png',
             reduce_zero_label=False,
             **kwargs)
         assert osp.exists(self.img_dir)

@@ -2,7 +2,7 @@ checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/twins/
 
 # model settings
 backbone_norm_cfg = dict(type='LN')
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     type='EncoderDecoder',
     backbone=dict(
@@ -43,11 +43,11 @@ model = dict(
         num_convs=1,
         concat_input=False,
         dropout_ratio=0.1,
-        num_classes=150,
+        num_classes=2,
         norm_cfg=norm_cfg,
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.4)),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=0.4)),
     # model training and testing settings
     train_cfg=dict(),
     test_cfg=dict(mode='whole'))

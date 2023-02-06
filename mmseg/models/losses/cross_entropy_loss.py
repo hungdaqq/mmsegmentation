@@ -222,7 +222,7 @@ class CrossEntropyLoss(nn.Module):
                  class_weight=None,
                  loss_weight=1.0,
                  loss_name='loss_ce',
-                 avg_non_ignore=False):
+                 avg_non_ignore=True):
         super(CrossEntropyLoss, self).__init__()
         assert (use_sigmoid is False) or (use_mask is False)
         self.use_sigmoid = use_sigmoid

@@ -1,5 +1,5 @@
 # model settings
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     type='CascadeEncoderDecoder',
     num_stages=2,
@@ -28,11 +28,11 @@ model = dict(
             feature_strides=[4, 8, 16, 32],
             channels=128,
             dropout_ratio=-1,
-            num_classes=19,
+            num_classes=2,
             norm_cfg=norm_cfg,
             align_corners=False,
             loss_decode=dict(
-                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
+                type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
         dict(
             type='PointHead',
             in_channels=[256],
@@ -41,10 +41,10 @@ model = dict(
             num_fcs=3,
             coarse_pred_each_layer=True,
             dropout_ratio=-1,
-            num_classes=19,
+            num_classes=2,
             align_corners=False,
             loss_decode=dict(
-                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
+                type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0))
     ],
     # model training and testing settings
     train_cfg=dict(

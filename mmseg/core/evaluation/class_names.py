@@ -123,7 +123,7 @@ def isaid_classes():
 
 def stare_classes():
     """stare class names for external use."""
-    return ['background', 'vessel']
+    return ['background', 'true']
 
 
 def cityscapes_palette():

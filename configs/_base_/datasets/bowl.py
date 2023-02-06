@@ -1,10 +1,11 @@
 # dataset settings
-dataset_type = 'STAREDataset'
-data_root = 'data/STARE'
+dataset_type = 'bowl'
+data_root = '/data/bowl/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-img_scale = (605, 700)
-crop_size = (128, 128)
+    # mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], to_rgb=True)
+img_scale = (224, 224)
+crop_size = (200, 200)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
@@ -34,26 +35,26 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=4,
-    workers_per_gpu=4,
+    samples_per_gpu=2,
+    workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
         times=40000,
         dataset=dict(
             type=dataset_type,
             data_root=data_root,
-            img_dir='images/training',
-            ann_dir='annotations/training',
+            img_dir='train/images',
+            ann_dir='train/grays',
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='images/validation',
-        ann_dir='annotations/validation',
+        img_dir='val/images',
+        ann_dir='val/grays',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='images/validation',
-        ann_dir='annotations/validation',
+        img_dir='val/images',
+        ann_dir='val/grays',
         pipeline=test_pipeline))

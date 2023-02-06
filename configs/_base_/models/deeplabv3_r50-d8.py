@@ -1,5 +1,5 @@
 # model settings
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     type='EncoderDecoder',
     pretrained='open-mmlab://resnet50_v1c',
@@ -25,7 +25,7 @@ model = dict(
         norm_cfg=norm_cfg,
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
     auxiliary_head=dict(
         type='FCNHead',
         in_channels=1024,
@@ -38,7 +38,7 @@ model = dict(
         norm_cfg=norm_cfg,
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.4)),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=0.4)),
     # model training and testing settings
     train_cfg=dict(),
     test_cfg=dict(mode='whole'))
