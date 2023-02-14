@@ -7,11 +7,12 @@ from .focal_loss import FocalLoss
 from .lovasz_loss import LovaszLoss
 from .tversky_loss import TverskyLoss
 from .tkbub_loss import TKBUBv2Loss
+from .bub_loss import BUBLoss
 from .utils import reduce_loss, weight_reduce_loss, weighted_loss
 
 __all__ = [
     'accuracy', 'Accuracy', 'cross_entropy', 'binary_cross_entropy',
     'mask_cross_entropy', 'CrossEntropyLoss', 'reduce_loss',
     'weight_reduce_loss', 'weighted_loss', 'LovaszLoss', 'DiceLoss',
-    'FocalLoss', 'TverskyLoss', 'TKBUBv2Loss'
+    'FocalLoss', 'TverskyLoss', 'TKBUBv2Loss', 'BUBLoss'
 ]

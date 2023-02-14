@@ -15,7 +15,7 @@ model = dict(
         in_channels=[64, 128, 320, 512],
         num_classes=2,
         out_channels=2, 
-        loss_decode=dict(type='TKBUBv2Loss',loss_weight=1.0)
+        loss_decode=dict(type='FocalLoss',loss_weight=1.0)
     )
 )
     
