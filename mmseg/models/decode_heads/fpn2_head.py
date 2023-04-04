@@ -3,31 +3,33 @@ import numpy as np
 import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule
+from mmcv.cnn import Conv2d, build_activation_layer, build_norm_layer
 
 from mmseg.ops import Upsample, resize
 from ..builder import HEADS
 from .decode_head import BaseDecodeHead
+from mmcv.runner import BaseModule, ModuleList, Sequential
 
-class RB(nn.Module):
+class RB(BaseModule):
     def __init__(self, in_channels, out_channels):
         super().__init__()
 
-        self.in_layers = nn.Sequential(
+        self.in_layers = Sequential(
             nn.GroupNorm(32, in_channels),
             nn.SiLU(),
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
         )
 
-        self.out_layers = nn.Sequential(
+        self.out_layers = Sequential(
             nn.GroupNorm(32, out_channels),
             nn.SiLU(),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
         )
 
         if out_channels == in_channels:
             self.skip = nn.Identity()
         else:
-            self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+            self.skip = Conv2d(in_channels, out_channels, kernel_size=1)
 
     def forward(self, x):
         h = self.in_layers(x)
@@ -76,17 +78,21 @@ class FPN2Head(BaseDecodeHead):
                             scale_factor=2,
                             mode='bilinear',
                             align_corners=self.align_corners))
-            self.scale_heads.append(nn.Sequential(*scale_head))
+            self.scale_heads.append(Sequential(*scale_head))
 
-        self.Predict = nn.Sequential(
+        self.Predict = Sequential(
             RB(64 + 32, 64), 
-            RB(64, 64)
-        )    
+            RB(64, 64),
+            Conv2d(64, 2, kernel_size=1))    
 
-        self.TBHead = nn.Sequential(
+        self.TBHead = Sequential(
             RB(128, 64), 
-            RB(64, 64)
-        )    
+            RB(64, 64))    
+
+        self.UpLast = Upsample(
+                    scale_factor=4,
+                    mode='bilinear',
+                    align_corners=self.align_corners)
 
     def forward(self, inputs):
 
@@ -101,10 +107,10 @@ class FPN2Head(BaseDecodeHead):
                 mode='bilinear',
                 align_corners=self.align_corners)
             
+        output =self.UpLast(output)
         output = self.TBHead(output)
-
-        output = torch.cat((output, x[-1]), dim=1)
+        output = torch.cat((output, inputs[-1]), dim=1)
 
         output = self.Predict(output)
-        output = self.cls_seg(output)
+        # output = self.cls_seg(output)
         return output

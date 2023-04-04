@@ -8,7 +8,7 @@ checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segfor
 model = dict(
     # pretrained=checkpoint,
     backbone=dict(init_cfg=dict(type='Pretrained', checkpoint=checkpoint), embed_dims=64, num_heads=[1, 2, 5, 8], num_layers=[3, 4, 6, 3]),
-    neck = dict(in_channels=[64, 128, 320, 512,32], out_channels=256),
+    neck = dict(in_channels=[64, 128, 320, 512], out_channels=256),
     decode_head=dict(in_channels=[256, 256, 256, 256], feature_strides=[4, 8, 16, 32], channels=128, num_classes=2, out_channels=2,
     loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0))
     )
@@ -37,4 +37,4 @@ lr_config = dict(
     min_lr=0.0,
     by_epoch=False)
 
-data = dict(samples_per_gpu=2)
+data = dict(samples_per_gpu=4)

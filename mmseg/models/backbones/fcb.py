@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.utils.checkpoint as cp
 from mmcv.cnn import Conv2d, build_activation_layer, build_norm_layer
 from mmcv.cnn.bricks.drop import build_dropout
+from mmseg.ops import Upsample, resize
 from mmcv.cnn.bricks.transformer import MultiheadAttention
 from mmcv.cnn.utils.weight_init import (constant_init, normal_init,trunc_normal_init)
 from mmcv.runner import BaseModule, ModuleList, Sequential
@@ -297,22 +298,22 @@ class RB(BaseModule):
     def __init__(self, in_channels, out_channels):
         super(RB,self).__init__()
 
-        self.in_layers = nn.Sequential(
+        self.in_layers = Sequential(
             nn.GroupNorm(32, in_channels),
             nn.SiLU(),
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
         )
 
-        self.out_layers = nn.Sequential(
+        self.out_layers = Sequential(
             nn.GroupNorm(32, out_channels),
             nn.SiLU(),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
         )
 
         if out_channels == in_channels:
             self.skip = nn.Identity()
         else:
-            self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+            self.skip = Conv2d(in_channels, out_channels, kernel_size=1)
 
     def forward(self, x):
         h = self.in_layers(x)
@@ -334,8 +335,8 @@ class FCB(BaseModule):
 
         super(FCB,self).__init__()
 
-        self.enc_blocks = nn.ModuleList(
-            [nn.Conv2d(in_channels, min_level_channels, kernel_size=3, padding=1)]
+        self.enc_blocks = ModuleList(
+            [Conv2d(in_channels, min_level_channels, kernel_size=3, padding=1)]
         )
         ch = min_level_channels
         enc_block_chans = [min_level_channels]
@@ -343,19 +344,19 @@ class FCB(BaseModule):
             min_channel_mult = min_channel_mults[level]
             for block in range(n_RBs):
                 self.enc_blocks.append(
-                    nn.Sequential(RB(ch, min_channel_mult * min_level_channels))
+                    Sequential(RB(ch, min_channel_mult * min_level_channels))
                 )
                 ch = min_channel_mult * min_level_channels
                 enc_block_chans.append(ch)
             if level != n_levels_down - 1:
                 self.enc_blocks.append(
-                    nn.Sequential(nn.Conv2d(ch, ch, kernel_size=3, padding=1, stride=2))
+                    Sequential(Conv2d(ch, ch, kernel_size=3, padding=1, stride=2))
                 )
                 enc_block_chans.append(ch)
 
-        self.middle_block = nn.Sequential(RB(ch, ch), RB(ch, ch))
+        self.middle_block = Sequential(RB(ch, ch), RB(ch, ch))
 
-        self.dec_blocks = nn.ModuleList([])
+        self.dec_blocks = ModuleList([])
         for level in range(n_levels_up):
             min_channel_mult = min_channel_mults[::-1][level]
 
@@ -369,12 +370,12 @@ class FCB(BaseModule):
                 ch = min_channel_mult * min_level_channels
                 if level < n_levels_up - 1 and block == n_RBs:
                     layers.append(
-                        nn.Sequential(
-                            nn.Upsample(scale_factor=2, mode="nearest"),
-                            nn.Conv2d(ch, ch, kernel_size=3, padding=1),
+                        Sequential(
+                            Upsample(scale_factor=2, mode="nearest"),
+                            Conv2d(ch, ch, kernel_size=3, padding=1),
                         )
                     )
-                self.dec_blocks.append(nn.Sequential(*layers))
+                self.dec_blocks.append(Sequential(*layers))
 
     def forward(self, x):
         hs = []
