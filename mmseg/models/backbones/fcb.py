@@ -293,8 +293,103 @@ class TransformerEncoderLayer(BaseModule):
             x = _inner_forward(x)
         return x
 
+class RB(BaseModule):
+    def __init__(self, in_channels, out_channels):
+        super(RB,self).__init__()
+
+        self.in_layers = nn.Sequential(
+            nn.GroupNorm(32, in_channels),
+            nn.SiLU(),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+        )
+
+        self.out_layers = nn.Sequential(
+            nn.GroupNorm(32, out_channels),
+            nn.SiLU(),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+        )
+
+        if out_channels == in_channels:
+            self.skip = nn.Identity()
+        else:
+            self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        h = self.in_layers(x)
+        h = self.out_layers(h)
+        return h + self.skip(x)
+
+
+class FCB(BaseModule):
+    def __init__(
+        self,
+        in_channels=3,
+        min_level_channels=32,
+        min_channel_mults=[1, 1, 2, 2, 4, 4],
+        n_levels_down=6,
+        n_levels_up=6,
+        n_RBs=2,
+        in_resolution=224,
+    ):
+
+        super(FCB,self).__init__()
+
+        self.enc_blocks = nn.ModuleList(
+            [nn.Conv2d(in_channels, min_level_channels, kernel_size=3, padding=1)]
+        )
+        ch = min_level_channels
+        enc_block_chans = [min_level_channels]
+        for level in range(n_levels_down):
+            min_channel_mult = min_channel_mults[level]
+            for block in range(n_RBs):
+                self.enc_blocks.append(
+                    nn.Sequential(RB(ch, min_channel_mult * min_level_channels))
+                )
+                ch = min_channel_mult * min_level_channels
+                enc_block_chans.append(ch)
+            if level != n_levels_down - 1:
+                self.enc_blocks.append(
+                    nn.Sequential(nn.Conv2d(ch, ch, kernel_size=3, padding=1, stride=2))
+                )
+                enc_block_chans.append(ch)
+
+        self.middle_block = nn.Sequential(RB(ch, ch), RB(ch, ch))
+
+        self.dec_blocks = nn.ModuleList([])
+        for level in range(n_levels_up):
+            min_channel_mult = min_channel_mults[::-1][level]
+
+            for block in range(n_RBs + 1):
+                layers = [
+                    RB(
+                        ch + enc_block_chans.pop(),
+                        min_channel_mult * min_level_channels,
+                    )
+                ]
+                ch = min_channel_mult * min_level_channels
+                if level < n_levels_up - 1 and block == n_RBs:
+                    layers.append(
+                        nn.Sequential(
+                            nn.Upsample(scale_factor=2, mode="nearest"),
+                            nn.Conv2d(ch, ch, kernel_size=3, padding=1),
+                        )
+                    )
+                self.dec_blocks.append(nn.Sequential(*layers))
+
+    def forward(self, x):
+        hs = []
+        h = x
+        for module in self.enc_blocks:
+            h = module(h)
+            hs.append(h)
+        h = self.middle_block(h)
+        for module in self.dec_blocks:
+            cat_in = torch.cat([h, hs.pop()], dim=1)
+            h = module(cat_in)
+        return h
+
 @BACKBONES.register_module()
-class MixVisionTransformer(BaseModule):
+class FCB_MixVisionTransformer(BaseModule):
     """The backbone of Segformer.
 
     This backbone is the implementation of `SegFormer: Simple and
@@ -355,7 +450,7 @@ class MixVisionTransformer(BaseModule):
                  pretrained=None,
                  init_cfg=None,
                  with_cp=False):
-        super(MixVisionTransformer, self).__init__(init_cfg=init_cfg)
+        super(FCB_MixVisionTransformer, self).__init__(init_cfg=init_cfg)
 
         assert not (init_cfg and pretrained), \
             'init_cfg and pretrained cannot be set at the same time'
@@ -365,7 +460,7 @@ class MixVisionTransformer(BaseModule):
             self.init_cfg = dict(type='Pretrained', checkpoint=pretrained)
         elif pretrained is not None:
             raise TypeError('pretrained must be a str or None')
-
+        
         self.embed_dims = embed_dims
         self.num_stages = num_stages
         self.num_layers = num_layers
@@ -379,6 +474,8 @@ class MixVisionTransformer(BaseModule):
 
         self.out_indices = out_indices
         assert max(out_indices) < self.num_stages
+
+        self.FCB = FCB(in_resolution=352)
 
         # transformer encoder
         dpr = [
@@ -430,11 +527,11 @@ class MixVisionTransformer(BaseModule):
                     normal_init(
                         m, mean=0, std=math.sqrt(2.0 / fan_out), bias=0)
         else:
-            super(MixVisionTransformer, self).init_weights()
+            super(FCB_MixVisionTransformer, self).init_weights()
 
     def forward(self, x):
         outs = []
-
+        out_fcb = self.FCB(x)
         for i, layer in enumerate(self.layers):
             x, hw_shape = layer[0](x)
             for block in layer[1]:
@@ -443,5 +540,6 @@ class MixVisionTransformer(BaseModule):
             x = nlc_to_nchw(x, hw_shape)
             if i in self.out_indices:
                 outs.append(x)
-
+        
+        outs.append(out_fcb)
         return outs

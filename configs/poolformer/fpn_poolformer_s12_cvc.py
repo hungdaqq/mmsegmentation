@@ -1,6 +1,6 @@
 _base_ = [
     '../_base_/models/fpn_poolformer_s12.py', '../_base_/default_runtime.py',
-    '../_base_/schedules/schedule_150k.py', '../_base_/datasets/cvc.py'
+    '../_base_/schedules/schedule_150k.py', '../_base_/datasets/cvc2.py'
 ]
 # model settings
 model = dict(

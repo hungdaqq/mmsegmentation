@@ -36,25 +36,25 @@ def plot_curve(log_dicts, args):
             # of training line.
             for epoch in epochs:
                 epoch_logs = log_dict[epoch]
-                if metric not in epoch_logs.keys():
-                    continue
-                if metric in ['mIoU', 'mAcc', 'aAcc']:
-                    plot_epochs.append(epoch)
-                    plot_values.append(epoch_logs[metric][0])
-                else:
-                    for idx in range(len(epoch_logs[metric])):
-                        if epoch_logs['mode'][idx] == 'train':
-                            plot_iters.append(epoch_logs['iter'][idx])
-                            plot_values.append(epoch_logs[metric][idx])
+                # if metric not in epoch_logs.keys():
+                #     continue
+                # if metric in ['mIoU', 'mAcc', 'aAcc']:
+                #     plot_epochs.append(epoch)
+                #     plot_values.append(epoch_logs[metric][0])
+                # else:
+                for idx in range(len(epoch_logs[metric])):
+                    if epoch_logs['mode'][idx] == 'train':
+                        plot_iters.append(epoch_logs['iter'][idx])
+                        plot_values.append(epoch_logs[metric][idx])
             ax = plt.gca()
             label = legend[i * num_metrics + j]
-            if metric in ['mIoU', 'mAcc', 'aAcc']:
-                ax.set_xticks(plot_epochs)
-                plt.xlabel('epoch')
-                plt.plot(plot_epochs, plot_values, label=label, marker='o')
-            else:
-                plt.xlabel('iter')
-                plt.plot(plot_iters, plot_values, label=label, linewidth=0.5)
+            # if metric in ['mIoU', 'mAcc', 'aAcc']:
+            #     ax.set_xticks(plot_epochs)
+            #     plt.xlabel('epoch')
+            #     plt.plot(plot_epochs, plot_values, label=label, marker='o')
+            # else:
+            plt.xlabel('iter')
+            plt.plot(plot_iters, plot_values, label=label, linewidth=0.5)
         plt.legend()
         if args.title is not None:
             plt.title(args.title)

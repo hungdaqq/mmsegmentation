@@ -69,7 +69,7 @@ class FPN(BaseModule):
                  out_channels,
                  num_outs,
                  start_level=0,
-                 end_level=-1,
+                 end_level=-2,
                  add_extra_convs=False,
                  extra_convs_on_inputs=False,
                  relu_before_extra_convs=False,
@@ -91,8 +91,8 @@ class FPN(BaseModule):
         self.fp16_enabled = False
         self.upsample_cfg = upsample_cfg.copy()
 
-        if end_level == -1:
-            self.backbone_end_level = self.num_ins
+        if end_level == -2:
+            self.backbone_end_level = self.num_ins - 1
             assert num_outs >= self.num_ins - start_level
         else:
             # if end_level < inputs, no extra level is allowed
@@ -210,4 +210,6 @@ class FPN(BaseModule):
                         outs.append(self.fpn_convs[i](F.relu(outs[-1])))
                     else:
                         outs.append(self.fpn_convs[i](outs[-1]))
+
+        outs.append(inputs[-1])
         return tuple(outs)

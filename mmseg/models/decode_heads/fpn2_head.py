@@ -8,8 +8,34 @@ from mmseg.ops import Upsample, resize
 from ..builder import HEADS
 from .decode_head import BaseDecodeHead
 
+class RB(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+
+        self.in_layers = nn.Sequential(
+            nn.GroupNorm(32, in_channels),
+            nn.SiLU(),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+        )
+
+        self.out_layers = nn.Sequential(
+            nn.GroupNorm(32, out_channels),
+            nn.SiLU(),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+        )
+
+        if out_channels == in_channels:
+            self.skip = nn.Identity()
+        else:
+            self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        h = self.in_layers(x)
+        h = self.out_layers(h)
+        return h + self.skip(x)
+
 @HEADS.register_module()
-class FPNHead(BaseDecodeHead):
+class FPN2Head(BaseDecodeHead):
     """Panoptic Feature Pyramid Networks.
 
     This head is the implementation of `Semantic FPN
@@ -22,7 +48,7 @@ class FPNHead(BaseDecodeHead):
     """
 
     def __init__(self, feature_strides, **kwargs):
-        super(FPNHead, self).__init__(
+        super(FPN2Head, self).__init__(
             input_transform='multiple_select', **kwargs)
         assert len(feature_strides) == len(self.in_channels)
         assert min(feature_strides) == feature_strides[0]
@@ -50,7 +76,17 @@ class FPNHead(BaseDecodeHead):
                             scale_factor=2,
                             mode='bilinear',
                             align_corners=self.align_corners))
-            self.scale_heads.append(nn.Sequential(*scale_head)) 
+            self.scale_heads.append(nn.Sequential(*scale_head))
+
+        self.Predict = nn.Sequential(
+            RB(64 + 32, 64), 
+            RB(64, 64)
+        )    
+
+        self.TBHead = nn.Sequential(
+            RB(128, 64), 
+            RB(64, 64)
+        )    
 
     def forward(self, inputs):
 
@@ -64,6 +100,11 @@ class FPNHead(BaseDecodeHead):
                 size=output.shape[2:],
                 mode='bilinear',
                 align_corners=self.align_corners)
+            
+        output = self.TBHead(output)
 
+        output = torch.cat((output, x[-1]), dim=1)
+
+        output = self.Predict(output)
         output = self.cls_seg(output)
         return output

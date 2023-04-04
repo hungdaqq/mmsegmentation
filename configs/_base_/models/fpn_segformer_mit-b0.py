@@ -31,7 +31,7 @@ model = dict(
     #         type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
     neck=dict(
         type='FPN',
-        in_channels=[256, 512, 1024, 2048],
+        in_channels=[64, 128, 320, 512],
         out_channels=256,
         num_outs=4),
     decode_head=dict(

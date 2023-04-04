@@ -120,3 +120,6 @@ mmseg/.mim
 *.pth
 
 work_dirs/
+
+*.png
+*.jpg
