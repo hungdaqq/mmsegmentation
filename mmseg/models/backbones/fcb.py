@@ -5,7 +5,7 @@ import warnings
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as cp
-from mmcv.cnn import Conv2d, build_activation_layer, build_norm_layer
+from mmcv.cnn import Conv2d, build_activation_layer, build_norm_layer, build_conv_layer
 from mmcv.cnn.bricks.drop import build_dropout
 from mmseg.ops import Upsample, resize
 from mmcv.cnn.bricks.transformer import MultiheadAttention
@@ -295,33 +295,90 @@ class TransformerEncoderLayer(BaseModule):
         return x
 
 class RB(BaseModule):
-    def __init__(self, in_channels, out_channels):
-        super(RB,self).__init__()
+    """Basic block for ResNet."""
 
-        self.in_layers = Sequential(
-            nn.GroupNorm(32, in_channels),
-            nn.SiLU(),
-            Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-        )
+    expansion = 1
 
-        self.out_layers = Sequential(
-            nn.GroupNorm(32, out_channels),
-            nn.SiLU(),
-            Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-        )
+    def __init__(self,
+                 inplanes,
+                 planes,
+                 stride=1,
+                 dilation=1,
+                 downsample=None,
+                 style='pytorch',
+                 with_cp=False,
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN'),
+                 dcn=None,
+                 plugins=None,
+                 init_cfg=None):
+        super(RB, self).__init__(init_cfg)
+        assert dcn is None, 'Not implemented yet.'
+        assert plugins is None, 'Not implemented yet.'
 
-        if out_channels == in_channels:
-            self.skip = nn.Identity()
-        else:
-            self.skip = Conv2d(in_channels, out_channels, kernel_size=1)
+        self.norm1_name, norm1 = build_norm_layer(norm_cfg, planes, postfix=1)
+        self.norm2_name, norm2 = build_norm_layer(norm_cfg, planes, postfix=2)
+
+        self.conv1 = build_conv_layer(
+            conv_cfg,
+            inplanes,
+            planes,
+            3,
+            stride=stride,
+            padding=dilation,
+            dilation=dilation,
+            bias=False)
+        self.add_module(self.norm1_name, norm1)
+        self.conv2 = build_conv_layer(conv_cfg, planes, planes, 3, padding=1, bias=False)
+        self.add_module(self.norm2_name, norm2)
+
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+        self.dilation = dilation
+        self.with_cp = with_cp
+
+    @property
+    def norm1(self):
+        """nn.Module: normalization layer after the first convolution layer"""
+        return getattr(self, self.norm1_name)
+
+    @property
+    def norm2(self):
+        """nn.Module: normalization layer after the second convolution layer"""
+        return getattr(self, self.norm2_name)
 
     def forward(self, x):
-        h = self.in_layers(x)
-        h = self.out_layers(h)
-        return h + self.skip(x)
+        """Forward function."""
 
+        def _inner_forward(x):
+            identity = x
+            out = self.conv1(x)
+            out = self.norm1(out)
+            out = self.relu(out)
 
-class FCB(BaseModule):
+            out = self.conv2(out)
+            out = self.norm2(out)
+            if self.downsample is not None:
+                identity = self.downsample(x)
+            if x.shape[1] != out.shape[1]:
+                self.skip = Conv2d(x.shape[1], out.shape[1], kernel_size=1)
+                out += self.skip(identity)
+            else:
+                out += identity
+
+            return out
+
+        if self.with_cp and x.requires_grad:
+            out = cp.checkpoint(_inner_forward, x)
+        else:
+            out = _inner_forward(x)
+
+        out = self.relu(out)
+
+        return out
+
+class FCB(nn.Module):
     def __init__(
         self,
         in_channels=3,
@@ -330,13 +387,13 @@ class FCB(BaseModule):
         n_levels_down=6,
         n_levels_up=6,
         n_RBs=2,
-        in_resolution=224,
+        in_resolution=352
     ):
 
-        super(FCB,self).__init__()
+        super().__init__()
 
-        self.enc_blocks = ModuleList(
-            [Conv2d(in_channels, min_level_channels, kernel_size=3, padding=1)]
+        self.enc_blocks = nn.ModuleList(
+            [nn.Conv2d(in_channels, min_level_channels, kernel_size=3, padding=1)]
         )
         ch = min_level_channels
         enc_block_chans = [min_level_channels]
@@ -344,19 +401,19 @@ class FCB(BaseModule):
             min_channel_mult = min_channel_mults[level]
             for block in range(n_RBs):
                 self.enc_blocks.append(
-                    Sequential(RB(ch, min_channel_mult * min_level_channels))
+                    nn.Sequential(RB(ch, min_channel_mult * min_level_channels))
                 )
                 ch = min_channel_mult * min_level_channels
                 enc_block_chans.append(ch)
             if level != n_levels_down - 1:
                 self.enc_blocks.append(
-                    Sequential(Conv2d(ch, ch, kernel_size=3, padding=1, stride=2))
+                    nn.Sequential(nn.Conv2d(ch, ch, kernel_size=3, padding=1, stride=2))
                 )
                 enc_block_chans.append(ch)
 
-        self.middle_block = Sequential(RB(ch, ch), RB(ch, ch))
+        self.middle_block = nn.Sequential(RB(ch, ch), RB(ch, ch))
 
-        self.dec_blocks = ModuleList([])
+        self.dec_blocks = nn.ModuleList([])
         for level in range(n_levels_up):
             min_channel_mult = min_channel_mults[::-1][level]
 
@@ -370,12 +427,12 @@ class FCB(BaseModule):
                 ch = min_channel_mult * min_level_channels
                 if level < n_levels_up - 1 and block == n_RBs:
                     layers.append(
-                        Sequential(
-                            Upsample(scale_factor=2, mode="nearest"),
-                            Conv2d(ch, ch, kernel_size=3, padding=1),
+                        nn.Sequential(
+                            nn.Upsample(scale_factor=2, mode="nearest"),
+                            nn.Conv2d(ch, ch, kernel_size=3, padding=1),
                         )
                     )
-                self.dec_blocks.append(Sequential(*layers))
+                self.dec_blocks.append(nn.Sequential(*layers))
 
     def forward(self, x):
         hs = []
