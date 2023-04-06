@@ -123,3 +123,5 @@ work_dirs/
 
 *.png
 *.jpg
+
+configs/_base_/datasets/bowl.py

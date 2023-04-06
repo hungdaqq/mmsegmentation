@@ -5,7 +5,7 @@ import warnings
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as cp
-from mmcv.cnn import Conv2d, build_activation_layer, build_norm_layer, build_conv_layer
+from mmcv.cnn import ConvModule, Conv2d, build_activation_layer, build_norm_layer, build_conv_layer
 from mmcv.cnn.bricks.drop import build_dropout
 from mmseg.ops import Upsample, resize
 from mmcv.cnn.bricks.transformer import MultiheadAttention
@@ -294,157 +294,166 @@ class TransformerEncoderLayer(BaseModule):
             x = _inner_forward(x)
         return x
 
-class RB(BaseModule):
-    """Basic block for ResNet."""
+# class SpatialPath(BaseModule):
+#     """Spatial Path to preserve the spatial size of the original input image
+#     and encode affluent spatial information.
 
-    expansion = 1
+#     Args:
+#         in_channels(int): The number of channels of input
+#             image. Default: 3.
+#         num_channels (Tuple[int]): The number of channels of
+#             each layers in Spatial Path.
+#             Default: (64, 64, 64, 128).
+#     Returns:
+#         x (torch.Tensor): Feature map for Feature Fusion Module.
+#     """
+
+#     def __init__(self,
+#                  in_channels=3,
+#                  num_channels=(64, 64, 64, 128),
+#                  conv_cfg=None,
+#                  norm_cfg=dict(type='BN'),
+#                  act_cfg=dict(type='ReLU'),
+#                  init_cfg=None):
+#         super(SpatialPath, self).__init__(init_cfg=init_cfg)
+#         assert len(num_channels) == 4, 'Length of input channels \
+#                                         of Spatial Path must be 4!'
+
+#         self.layers = []
+#         for i in range(len(num_channels)):
+#             layer_name = f'layer{i + 1}'
+#             self.layers.append(layer_name)
+#             if i == 0:
+#                 self.add_module(
+#                     layer_name,
+#                     ConvModule(
+#                         in_channels=in_channels,
+#                         out_channels=num_channels[i],
+#                         kernel_size=7,
+#                         stride=2,
+#                         padding=3,
+#                         conv_cfg=conv_cfg,
+#                         norm_cfg=norm_cfg,
+#                         act_cfg=act_cfg))
+#             elif i == len(num_channels) - 1:
+#                 self.add_module(
+#                     layer_name,
+#                     ConvModule(
+#                         in_channels=num_channels[i - 1],
+#                         out_channels=num_channels[i],
+#                         kernel_size=1,
+#                         stride=1,
+#                         padding=0,
+#                         conv_cfg=conv_cfg,
+#                         norm_cfg=norm_cfg,
+#                         act_cfg=act_cfg))
+#             else:
+#                 self.add_module(
+#                     layer_name,
+#                     ConvModule(
+#                         in_channels=num_channels[i - 1],
+#                         out_channels=num_channels[i],
+#                         kernel_size=3,
+#                         stride=2,
+#                         padding=1,
+#                         conv_cfg=conv_cfg,
+#                         norm_cfg=norm_cfg,
+#                         act_cfg=act_cfg))
+
+#     def forward(self, x):
+#         for i, layer_name in enumerate(self.layers):
+#             layer_stage = getattr(self, layer_name)
+#             x = layer_stage(x)
+#         return x
+
+class DetailBranch(BaseModule):
+    """Detail Branch with wide channels and shallow layers to capture low-level
+    details and generate high-resolution feature representation.
+
+    Args:
+        detail_channels (Tuple[int]): Size of channel numbers of each stage
+            in Detail Branch, in paper it has 3 stages.
+            Default: (64, 64, 128).
+        in_channels (int): Number of channels of input image. Default: 3.
+        conv_cfg (dict | None): Config of conv layers.
+            Default: None.
+        norm_cfg (dict | None): Config of norm layers.
+            Default: dict(type='BN').
+        act_cfg (dict): Config of activation layers.
+            Default: dict(type='ReLU').
+        init_cfg (dict or list[dict], optional): Initialization config dict.
+            Default: None.
+    Returns:
+        x (torch.Tensor): Feature map of Detail Branch.
+    """
 
     def __init__(self,
-                 inplanes,
-                 planes,
-                 stride=1,
-                 dilation=1,
-                 downsample=None,
-                 style='pytorch',
-                 with_cp=False,
+                 detail_channels=(64, 128),
+                 in_channels=3,
                  conv_cfg=None,
                  norm_cfg=dict(type='BN'),
-                 dcn=None,
-                 plugins=None,
+                 act_cfg=dict(type='ReLU'),
                  init_cfg=None):
-        super(RB, self).__init__(init_cfg)
-        assert dcn is None, 'Not implemented yet.'
-        assert plugins is None, 'Not implemented yet.'
-
-        self.norm1_name, norm1 = build_norm_layer(norm_cfg, planes, postfix=1)
-        self.norm2_name, norm2 = build_norm_layer(norm_cfg, planes, postfix=2)
-
-        self.conv1 = build_conv_layer(
-            conv_cfg,
-            inplanes,
-            planes,
-            3,
-            stride=stride,
-            padding=dilation,
-            dilation=dilation,
-            bias=False)
-        self.add_module(self.norm1_name, norm1)
-        self.conv2 = build_conv_layer(conv_cfg, planes, planes, 3, padding=1, bias=False)
-        self.add_module(self.norm2_name, norm2)
-
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-        self.stride = stride
-        self.dilation = dilation
-        self.with_cp = with_cp
-
-    @property
-    def norm1(self):
-        """nn.Module: normalization layer after the first convolution layer"""
-        return getattr(self, self.norm1_name)
-
-    @property
-    def norm2(self):
-        """nn.Module: normalization layer after the second convolution layer"""
-        return getattr(self, self.norm2_name)
-
-    def forward(self, x):
-        """Forward function."""
-
-        def _inner_forward(x):
-            identity = x
-            out = self.conv1(x)
-            out = self.norm1(out)
-            out = self.relu(out)
-
-            out = self.conv2(out)
-            out = self.norm2(out)
-            if self.downsample is not None:
-                identity = self.downsample(x)
-            if x.shape[1] != out.shape[1]:
-                self.skip = Conv2d(x.shape[1], out.shape[1], kernel_size=1)
-                out += self.skip(identity)
+        super(DetailBranch, self).__init__(init_cfg=init_cfg)
+        detail_branch = []
+        for i in range(len(detail_channels)):
+            if i == 0:
+                detail_branch.append(
+                    nn.Sequential(
+                        ConvModule(
+                            in_channels=in_channels,
+                            out_channels=detail_channels[i],
+                            kernel_size=3,
+                            stride=2,
+                            padding=1,
+                            conv_cfg=conv_cfg,
+                            norm_cfg=norm_cfg,
+                            act_cfg=act_cfg),
+                        ConvModule(
+                            in_channels=detail_channels[i],
+                            out_channels=detail_channels[i],
+                            kernel_size=3,
+                            stride=1,
+                            padding=1,
+                            conv_cfg=conv_cfg,
+                            norm_cfg=norm_cfg,
+                            act_cfg=act_cfg)))
             else:
-                out += identity
-
-            return out
-
-        if self.with_cp and x.requires_grad:
-            out = cp.checkpoint(_inner_forward, x)
-        else:
-            out = _inner_forward(x)
-
-        out = self.relu(out)
-
-        return out
-
-class FCB(nn.Module):
-    def __init__(
-        self,
-        in_channels=3,
-        min_level_channels=32,
-        min_channel_mults=[1, 1, 2, 2, 4, 4],
-        n_levels_down=6,
-        n_levels_up=6,
-        n_RBs=2,
-        in_resolution=352
-    ):
-
-        super().__init__()
-
-        self.enc_blocks = nn.ModuleList(
-            [nn.Conv2d(in_channels, min_level_channels, kernel_size=3, padding=1)]
-        )
-        ch = min_level_channels
-        enc_block_chans = [min_level_channels]
-        for level in range(n_levels_down):
-            min_channel_mult = min_channel_mults[level]
-            for block in range(n_RBs):
-                self.enc_blocks.append(
-                    nn.Sequential(RB(ch, min_channel_mult * min_level_channels))
-                )
-                ch = min_channel_mult * min_level_channels
-                enc_block_chans.append(ch)
-            if level != n_levels_down - 1:
-                self.enc_blocks.append(
-                    nn.Sequential(nn.Conv2d(ch, ch, kernel_size=3, padding=1, stride=2))
-                )
-                enc_block_chans.append(ch)
-
-        self.middle_block = nn.Sequential(RB(ch, ch), RB(ch, ch))
-
-        self.dec_blocks = nn.ModuleList([])
-        for level in range(n_levels_up):
-            min_channel_mult = min_channel_mults[::-1][level]
-
-            for block in range(n_RBs + 1):
-                layers = [
-                    RB(
-                        ch + enc_block_chans.pop(),
-                        min_channel_mult * min_level_channels,
-                    )
-                ]
-                ch = min_channel_mult * min_level_channels
-                if level < n_levels_up - 1 and block == n_RBs:
-                    layers.append(
-                        nn.Sequential(
-                            nn.Upsample(scale_factor=2, mode="nearest"),
-                            nn.Conv2d(ch, ch, kernel_size=3, padding=1),
-                        )
-                    )
-                self.dec_blocks.append(nn.Sequential(*layers))
+                detail_branch.append(
+                    nn.Sequential(
+                        ConvModule(
+                            in_channels=detail_channels[i - 1],
+                            out_channels=detail_channels[i],
+                            kernel_size=3,
+                            stride=2,
+                            padding=1,
+                            conv_cfg=conv_cfg,
+                            norm_cfg=norm_cfg,
+                            act_cfg=act_cfg),
+                        ConvModule(
+                            in_channels=detail_channels[i],
+                            out_channels=detail_channels[i],
+                            kernel_size=3,
+                            stride=1,
+                            padding=1,
+                            conv_cfg=conv_cfg,
+                            norm_cfg=norm_cfg,
+                            act_cfg=act_cfg),
+                        ConvModule(
+                            in_channels=detail_channels[i],
+                            out_channels=detail_channels[i],
+                            kernel_size=3,
+                            stride=1,
+                            padding=1,
+                            conv_cfg=conv_cfg,
+                            norm_cfg=norm_cfg,
+                            act_cfg=act_cfg)))
+        self.detail_branch = nn.ModuleList(detail_branch)
 
     def forward(self, x):
-        hs = []
-        h = x
-        for module in self.enc_blocks:
-            h = module(h)
-            hs.append(h)
-        h = self.middle_block(h)
-        for module in self.dec_blocks:
-            cat_in = torch.cat([h, hs.pop()], dim=1)
-            h = module(cat_in)
-        return h
+        for stage in self.detail_branch:
+            x = stage(x)
+        return x
 
 @BACKBONES.register_module()
 class FCB_MixVisionTransformer(BaseModule):
@@ -533,7 +542,7 @@ class FCB_MixVisionTransformer(BaseModule):
         self.out_indices = out_indices
         assert max(out_indices) < self.num_stages
 
-        self.FCB = FCB(in_resolution=352)
+        self.FCB = DetailBranch()
 
         # transformer encoder
         dpr = [
